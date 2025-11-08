@@ -4,12 +4,12 @@ LAB 6: Sensor Data Logging System
 Ashfall Monitoring - Post-Volcanic Eruption
 
 Sensors:
-- DHT11: Temperature & Humidity
-- Sound Sensor: Simulates tremor/vibration detection
-- Soil Moisture: Simulates ash accumulation/PM2.5 levels
+- DHT11: Temperature & Humidity (GPIO 4)
+- Sound Sensor: Digital output (GPIO 17)
+- Soil Moisture: Digital output D0 (GPIO 27)
 
-Logic: More ash → Soil becomes drier → Lower moisture reading
-       Dry soil = Heavy ashfall conditions
+Logic: Dry soil (D0=HIGH) = Heavy ash = High PM2.5
+       Wet soil (D0=LOW) = No ash = Low PM2.5
 
 Outputs:
 - sensor_data.csv with timestamps
@@ -20,8 +20,16 @@ import csv
 from datetime import datetime
 import board
 import adafruit_dht
-from gpiozero import Button, MCP3008
+import RPi.GPIO as GPIO
 import os
+
+# ============================================
+# GPIO SETUP
+# ============================================
+
+# Use BCM pin numbering
+GPIO.setmode(GPIO.BCM)
+GPIO.setwarnings(False)
 
 # ============================================
 # SENSOR CONFIGURATION
@@ -31,79 +39,76 @@ import os
 DHT_PIN = board.D4  # GPIO 4
 dht_device = adafruit_dht.DHT11(DHT_PIN)
 
-# Sound Sensor Configuration (Digital Output)
+# Sound Sensor Configuration (Digital Output D0)
 SOUND_PIN = 17  # GPIO 17
-sound_sensor = Button(SOUND_PIN, pull_up=False, bounce_time=0.1)
+GPIO.setup(SOUND_PIN, GPIO.IN)
 
-# Soil Moisture Sensor (Analog via MCP3008)
-# Using SPI with MCP3008 ADC
-SOIL_CHANNEL = 0  # CH0 on MCP3008
-soil_sensor = MCP3008(channel=SOIL_CHANNEL)
+# Soil Moisture Sensor (Digital Output D0)
+SOIL_PIN = 27  # GPIO 27
+GPIO.setup(SOIL_PIN, GPIO.IN)
 
 # CSV File Configuration
 CSV_FILE = "sensor_data.csv"
 LOG_INTERVAL = 5  # seconds between readings
 
 # ============================================
-# CALIBRATION VALUES
+# CALIBRATION/MAPPING
 # ============================================
 
-# Soil Moisture Calibration
-# You need to calibrate your specific sensor:
-# - Dry in air (no moisture) = ~1.0 (100%)
-# - Fully wet (in water) = ~0.0 (0%)
+# Digital soil sensor mapping:
+# D0 = HIGH (1) → Dry soil → Heavy ash
+# D0 = LOW (0)  → Wet soil → No ash
 
-SOIL_DRY = 0.95   # Sensor value when completely dry (heavy ash)
-SOIL_WET = 0.20   # Sensor value when wet (no ash)
-
-# ============================================
-# SIMULATION FORMULAS
-# ============================================
-
-def calculate_pm25_from_soil(soil_value):
+def calculate_pm25_from_soil(soil_is_dry):
     """
-    Convert soil moisture to simulated PM2.5 (ash density in air)
+    Convert digital soil sensor to simulated PM2.5
     
     Logic: 
-    - Dry soil (ash covered) = High PM2.5 (lots of ash in air)
-    - Wet soil (no ash) = Low PM2.5 (clean air)
+    - Dry (D0=HIGH) = Heavy ash = High PM2.5 (400-500 range)
+    - Wet (D0=LOW)  = No ash = Low PM2.5 (0-50 range)
     
-    Formula: PM2.5 = map soil value (0.2-0.95) to PM2.5 range (0-500)
-    
-    Returns: PM2.5 in µg/m³ (0-500 range)
+    Returns: PM2.5 in µg/m³
     """
-    if soil_value is None:
+    if soil_is_dry is None:
         return None
     
-    # Clamp soil value to calibrated range
-    soil_clamped = max(SOIL_WET, min(SOIL_DRY, soil_value))
-    
-    # Normalize to 0-1 range (0=wet, 1=dry)
-    normalized = (soil_clamped - SOIL_WET) / (SOIL_DRY - SOIL_WET)
-    
-    # Map to PM2.5 range (0-500 µg/m³)
-    # Higher dryness = Higher PM2.5
-    pm25 = normalized * 500
+    if soil_is_dry:
+        # Dry = Heavy ash (add some variation)
+        import random
+        pm25 = 400 + random.uniform(0, 100)
+    else:
+        # Wet = Clean air
+        import random
+        pm25 = random.uniform(0, 50)
     
     return round(pm25, 1)
 
-def get_ash_accumulation_level(soil_value):
+def get_ash_accumulation_level(soil_is_dry):
     """
-    Get qualitative ash accumulation based on soil moisture
+    Get qualitative ash accumulation based on soil sensor
     
     Returns: (level, description)
     """
-    if soil_value is None:
+    if soil_is_dry is None:
         return "UNKNOWN", "Sensor error"
     
-    if soil_value > 0.80:
-        return "HEAVY", "Thick ash layer detected"
-    elif soil_value > 0.60:
-        return "MODERATE", "Visible ash accumulation"
-    elif soil_value > 0.40:
-        return "LIGHT", "Minimal ash present"
+    if soil_is_dry:
+        return "HEAVY", "Dry conditions - Thick ash layer detected"
     else:
-        return "NONE", "No significant ash"
+        return "NONE", "Moist conditions - No significant ash"
+
+def get_soil_moisture_status(soil_is_dry):
+    """
+    Convert digital reading to descriptive moisture level
+    
+    Returns: moisture description
+    """
+    if soil_is_dry is None:
+        return "ERROR"
+    elif soil_is_dry:
+        return "DRY (0-20%)"
+    else:
+        return "WET (80-100%)"
 
 def calculate_tremor(sound_detected, previous_tremor=0.01):
     """
@@ -117,7 +122,7 @@ def calculate_tremor(sound_detected, previous_tremor=0.01):
         tremor = round(previous_tremor + 0.02, 3)
         tremor = min(tremor, 0.10)  # Max tremor
     else:
-        # Decay back to baseline
+        # Decay back to baselineS
         tremor = round(previous_tremor * 0.8, 3)
         tremor = max(tremor, 0.001)  # Minimum baseline
     
@@ -136,8 +141,8 @@ def initialize_csv():
             'Timestamp',
             'Temperature_C',
             'Humidity_%',
-            'Soil_Moisture_Raw',
-            'Soil_Moisture_%',
+            'Soil_Digital_Reading',
+            'Soil_Moisture_Status',
             'Sound_Detected',
             'Ash_Accumulation_Level',
             'Simulated_PM25',
@@ -198,25 +203,32 @@ def read_and_log_data(previous_tremor):
         temperature = dht_device.temperature
         humidity = dht_device.humidity
     except RuntimeError as e:
-        print(f"⚠️  DHT11 read error: {e}")
+        print(f"DHT11 read error: {e}")
         temperature = None
         humidity = None
     
-    # Read Soil Moisture Sensor (analog value 0.0 to 1.0)
+    # Read Soil Moisture Sensor (Digital D0)
     try:
-        soil_raw = soil_sensor.value  # 0.0 (wet) to 1.0 (dry)
-        soil_percent = (1.0 - soil_raw) * 100  # Convert to moisture % (100% = wet)
+        soil_digital = GPIO.input(SOIL_PIN)  # 1 = Dry, 0 = Wet
+        soil_is_dry = bool(soil_digital)
+        soil_status = get_soil_moisture_status(soil_is_dry)
     except Exception as e:
-        print(f"⚠️  Soil sensor read error: {e}")
-        soil_raw = None
-        soil_percent = None
+        print(f"Soil sensor read error: {e}")
+        soil_digital = None
+        soil_is_dry = None
+        soil_status = "ERROR"
     
-    # Read Sound Sensor
-    sound_detected = sound_sensor.is_pressed  # True if sound detected
+    # Read Sound Sensor (Digital D0)
+    try:
+        sound_digital = GPIO.input(SOUND_PIN)  # 1 = Sound detected
+        sound_detected = bool(sound_digital)
+    except Exception as e:
+        print(f"Sound sensor read error: {e}")
+        sound_detected = False
     
     # Calculate derived values
-    pm25 = calculate_pm25_from_soil(soil_raw)
-    ash_level, ash_desc = get_ash_accumulation_level(soil_raw)
+    pm25 = calculate_pm25_from_soil(soil_is_dry)
+    ash_level, ash_desc = get_ash_accumulation_level(soil_is_dry)
     tremor = calculate_tremor(sound_detected, previous_tremor)
     
     # Get status classifications
@@ -228,8 +240,8 @@ def read_and_log_data(previous_tremor):
         'Timestamp': timestamp,
         'Temperature_C': f"{temperature:.1f}" if temperature else "N/A",
         'Humidity_%': f"{humidity:.1f}" if humidity else "N/A",
-        'Soil_Moisture_Raw': f"{soil_raw:.3f}" if soil_raw else "N/A",
-        'Soil_Moisture_%': f"{soil_percent:.1f}" if soil_percent else "N/A",
+        'Soil_Digital_Reading': "DRY" if soil_is_dry else "WET" if soil_is_dry is not None else "N/A",
+        'Soil_Moisture_Status': soil_status,
         'Sound_Detected': "YES" if sound_detected else "NO",
         'Ash_Accumulation_Level': ash_level,
         'Simulated_PM25': f"{pm25:.1f}" if pm25 else "N/A",
@@ -245,16 +257,16 @@ def read_and_log_data(previous_tremor):
     
     # Print to console with ash visualization
     print(f"\n{'='*70}")
-    print(f"🕐 {timestamp}")
+    print(f"{timestamp}")
     print(f"{'='*70}")
-    print(f"🌡️  Temperature:      {temperature}°C" if temperature else "🌡️  Temperature:      N/A")
-    print(f"💧 Humidity:         {humidity}%" if humidity else "💧 Humidity:         N/A")
-    print(f"🌱 Soil Moisture:    {soil_percent:.1f}% (Raw: {soil_raw:.3f})" if soil_raw else "🌱 Soil Moisture:    N/A")
-    print(f"🔊 Sound Detected:   {'YES ⚠️ ' if sound_detected else 'NO'}")
+    print(f"Temperature:      {temperature:.1f}C" if temperature else "Temperature:      N/A")
+    print(f"Humidity:         {humidity:.1f}%" if humidity else "Humidity:         N/A")
+    print(f"Soil Sensor:      {soil_status} (Digital: {'HIGH' if soil_is_dry else 'LOW'})")
+    print(f"Sound Detected:   {'YES' if sound_detected else 'NO'}")
     print(f"{'─'*70}")
-    print(f"🌋 Ash Level:        {ash_level} - {ash_desc}")
-    print(f"🌫️  PM2.5 (simulated): {pm25:.0f} µg/m³ [{air_status}]" if pm25 else "🌫️  PM2.5:            N/A")
-    print(f"📳 Tremor:           {tremor:.3f} m/s² [{tremor_status}]")
+    print(f"Ash Level:        {ash_level} - {ash_desc}")
+    print(f"PM2.5 (simulated): {pm25:.0f} ug/m³ [{air_status}]" if pm25 else "PM2.5:            N/A")
+    print(f"Tremor:           {tremor:.3f} m/s² [{tremor_status}]")
     print(f"{'='*70}")
     
     return tremor  # Return for next iteration
@@ -266,24 +278,25 @@ def read_and_log_data(previous_tremor):
 def main():
     """Main logging loop"""
     print("\n" + "="*70)
-    print("🌋 ASHFALL MONITORING - DATA LOGGING SYSTEM")
-    print("   Lab 6: Sensor Data Logger with Soil Moisture")
+    print("ASHFALL MONITORING - DATA LOGGING SYSTEM")
+    print("   Lab 6: Sensor Data Logger with Digital Soil Moisture")
     print("="*70)
-    print(f"📊 Logging to: {CSV_FILE}")
-    print(f"⏱️  Interval: {LOG_INTERVAL} seconds")
-    print(f"🌡️  Sensor 1: DHT11 (Temperature & Humidity)")
-    print(f"🌱 Sensor 2: Soil Moisture (Ashfall Simulation)")
-    print(f"🔊 Sensor 3: Sound Sensor (Tremor Simulation)")
+    print(f"Logging to: {CSV_FILE}")
+    print(f"Interval: {LOG_INTERVAL} seconds")
+    print(f"Sensor 1: DHT11 (Temperature & Humidity) - GPIO 4")
+    print(f"ensor 2: Soil Moisture Digital (D0) - GPIO 27")
+    print(f" Sensor 3: Sound Sensor Digital (D0) - GPIO 17")
     print("="*70)
-    print("\n💡 SENSOR LOGIC:")
-    print("   • Dry soil (high value) = Heavy ash = High PM2.5")
-    print("   • Wet soil (low value)  = No ash    = Low PM2.5")
+    print("\n SENSOR LOGIC:")
+    print("   • Dry soil (D0=HIGH) = Heavy ash = High PM2.5")
+    print("   • Wet soil (D0=LOW)  = No ash    = Low PM2.5")
     print("="*70)
-    print("\n🧪 CALIBRATION INFO:")
-    print(f"   • Dry (in air):  {SOIL_DRY:.2f} → Heavy ash")
-    print(f"   • Wet (in water): {SOIL_WET:.2f} → No ash")
-    print("="*70)
-    print("\n⌨️  Press Ctrl+C to stop logging\n")
+    # print("\n WIRING CHECK:")
+    # print("   DHT11:  VCC→3.3V, GND→GND, DATA→GPIO4")
+    # print("   Soil:   VCC→5V, GND→GND, D0→GPIO27")
+    # print("   Sound:  VCC→5V, GND→GND, D0→GPIO17")
+    # print("="*70)
+    print("\nPress Ctrl+C to stop logging\n")
     
     # Initialize CSV
     initialize_csv()
@@ -298,11 +311,12 @@ def main():
             
     except KeyboardInterrupt:
         print("\n\n🛑 Logging stopped by user")
-        print(f"✓ Data saved to: {CSV_FILE}")
+        print(f"Data saved to: {CSV_FILE}")
     
     finally:
         dht_device.exit()
-        print("✓ Sensors cleaned up")
+        GPIO.cleanup()
+        print("Sensors cleaned up")
         print("="*70)
 
 if __name__ == "__main__":
