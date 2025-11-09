@@ -141,7 +141,9 @@ class SensorHandler:
                 time.sleep(5)
 
     def _read_sensors(self):
-        """Read physical sensors (uses gpiozero when available)."""
+        """Read physical sensors - lab6_2 logic"""
+        import random
+        
         if HARDWARE_AVAILABLE:
             # DHT11 (may raise RuntimeError frequently; retry strategy handled by loop)
             if self.dht:
@@ -169,11 +171,11 @@ class SensorHandler:
                     print(f"Soil sensor error: {e}")
         else:
             # Simulation mode (same behaviour as lab6_2)
-            import random
             self.temperature = 28 + random.uniform(0, 8)
             self.humidity = 70 + random.uniform(-10, 10)
             self.sound_detected = random.random() < 0.1
             self.soil_is_dry = random.random() < 0.3
+            print(f"[SIM] T={self.temperature:.1f}C H={self.humidity:.1f}% Soil={'DRY' if self.soil_is_dry else 'WET'} Sound={'YES' if self.sound_detected else 'NO'}")
 
     def _calculate_derived_values(self):
         """Calculate PM2.5 and tremor from available sensors (lab6_2 mapping)."""
@@ -199,6 +201,8 @@ class SensorHandler:
         else:
             trem = round(self.tremor * 0.8, 3)
             self.tremor = max(trem, 0.001)
+        
+        print(f"[CALC] PM2.5={self.pm25} Ash={self.ash_level} Tremor={self.tremor:.3f}")
 
     def _log_data(self):
         """Log sensor data to CSV"""
