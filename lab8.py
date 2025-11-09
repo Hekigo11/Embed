@@ -108,20 +108,20 @@ class SensorHandler:
             self.dht = None
             self.sound_sensor = None
             self.soil_sensor = None
-    
+    pass
     def start(self):
         """Start continuous sensor reading"""
         self.running = True
         thread = threading.Thread(target=self._read_loop, daemon=True)
         thread.start()
         print("Sensor reading thread started")
-    
+    pass
     def stop(self):
         """Stop sensor reading"""
         self.running = False
         if HARDWARE_AVAILABLE and self.dht:
             self.dht.exit()
-    
+    pass
     def _read_loop(self):
         """Continuous reading loop"""
         while self.running:
@@ -136,7 +136,7 @@ class SensorHandler:
                 self.error_count += 1
                 print(f"Sensor read error: {e}")
                 time.sleep(5)
-    
+    pass
     def _read_sensors(self):
         """Read physical sensors"""
         if HARDWARE_AVAILABLE:
@@ -162,7 +162,7 @@ class SensorHandler:
             self.humidity = 70 + random.uniform(-10, 10)
             self.sound_detected = random.random() < 0.1
             self.soil_is_dry = random.random() < 0.3
-    
+    pass
     def _calculate_derived_values(self):
         """Calculate PM2.5 and tremor from available sensors"""
         # PM2.5 from soil moisture
@@ -182,32 +182,33 @@ class SensorHandler:
             self.tremor = min(self.tremor + 0.02, 0.10)
         else:
             self.tremor = max(self.tremor * 0.85, 0.001)
-    
+    pass
+
     def _log_data(self):
-        """Log sensor data to CSV"""
+        """Log sensor data to CSV - Clean format for future sensor compatibility"""
         if not os.path.exists(SENSOR_LOG):
             with open(SENSOR_LOG, 'w', newline='') as f:
                 writer = csv.writer(f)
                 writer.writerow([
-                    'Timestamp', 'Temperature_C', 'Humidity_%', 
-                    'Soil_Status', 'Ash_Level', 'Simulated_PM25_ugm3',
-                    'Sound_Detected', 'Simulated_Tremor_ms2',
-                    'Air_Quality_Status', 'Tremor_Status'
+                    'Timestamp',
+                    'Temperature_C',
+                    'Humidity_%',
+                    'PM25_ugm3',
+                    'Tremor_ms2',
+                    'Air_Quality_Status',
+                    'Seismic_Status'
                 ])
-        
+
         air_status, _ = self.get_air_quality_status()
         tremor_status, _ = self.get_tremor_status()
-        
+
         with open(SENSOR_LOG, 'a', newline='') as f:
             writer = csv.writer(f)
             writer.writerow([
                 datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                f"{self.temperature:.1f}" if self.temperature else "N/A",
-                f"{self.humidity:.1f}" if self.humidity else "N/A",
-                "DRY" if self.soil_is_dry else "WET",
-                self.ash_level,
-                f"{self.pm25:.1f}" if self.pm25 else "N/A",
-                "YES" if self.sound_detected else "NO",
+                f"{self.temperature:.1f}" if self.temperature is not None else "N/A",
+                f"{self.humidity:.1f}" if self.humidity is not None else "N/A",
+                f"{self.pm25:.1f}" if self.pm25 is not None else "N/A",
                 f"{self.tremor:.3f}",
                 air_status,
                 tremor_status
