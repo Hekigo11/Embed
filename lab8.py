@@ -201,18 +201,15 @@ class SensorHandler:
             self.tremor = max(trem, 0.001)
 
     def _log_data(self):
-        """Log sensor data to CSV - Clean format for future sensor compatibility"""
+        """Log sensor data to CSV"""
         if not os.path.exists(SENSOR_LOG):
             with open(SENSOR_LOG, 'w', newline='') as f:
                 writer = csv.writer(f)
                 writer.writerow([
-                    'Timestamp',
-                    'Temperature_C',
-                    'Humidity_%',
-                    'PM25_ugm3',
-                    'Tremor_ms2',
-                    'Air_Quality_Status',
-                    'Seismic_Status'
+                    'Timestamp', 'Temperature_C', 'Humidity_%', 
+                    'Soil_Status', 'Ash_Level', 'Simulated_PM25_ugm3',
+                    'Sound_Detected', 'Simulated_Tremor_ms2',
+                    'Air_Quality_Status', 'Tremor_Status'
                 ])
         
         air_status, _ = self.get_air_quality_status()
@@ -224,12 +221,14 @@ class SensorHandler:
                 datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 f"{self.temperature:.1f}" if self.temperature else "N/A",
                 f"{self.humidity:.1f}" if self.humidity else "N/A",
+                "DRY" if self.soil_is_dry else "WET",
+                self.ash_level,
                 f"{self.pm25:.1f}" if self.pm25 else "N/A",
+                "YES" if self.sound_detected else "NO",
                 f"{self.tremor:.3f}",
                 air_status,
                 tremor_status
             ])
-
     def get_air_quality_status(self):
         """Get air quality classification"""
         if self.pm25 is None:
