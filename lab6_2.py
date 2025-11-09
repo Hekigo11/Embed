@@ -310,7 +310,7 @@ def main():
             time.sleep(LOG_INTERVAL)
             
     except KeyboardInterrupt:
-        print("\n\n🛑 Logging stopped by user")
+        print("\n\n Logging stopped by user")
         print(f"Data saved to: {CSV_FILE}")
     
     finally:

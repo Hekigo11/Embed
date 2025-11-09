@@ -26,7 +26,8 @@ import os
 try:
     import board
     import adafruit_dht
-    from gpiozero import Button, RGBLED, LED, Buzzer
+    import RPi.GPIO as GPIO
+    from gpiozero import RGBLED, LED, Buzzer
     HARDWARE_AVAILABLE = True
 except ImportError:
     HARDWARE_AVAILABLE = False
@@ -67,6 +68,7 @@ BEACON_PIN = 22
 # Data files
 SENSOR_LOG = "lab8_sensor_log.csv"
 REPORT_LOG = "lab8_user_reports.csv"
+PERF_LOG = "lab8_performance_log.csv"
 
 # ============================================
 # SENSOR HANDLER
@@ -91,23 +93,31 @@ class SensorHandler:
         self.read_count = 0
         self.error_count = 0
         self.last_read_time = None
+        self.last_cycle_ms = 0.0
+        self.avg_cycle_ms = 0.0
+        self.perf_log_interval = 20
+
+        # Keep last known good DHT values
+        self._last_temp_ok = None
+        self._last_humid_ok = None
 
         # Initialize hardware
         if HARDWARE_AVAILABLE:
             try:
+                # GPIO setup mirrors lab6_2
+                GPIO.setmode(GPIO.BCM)
+                GPIO.setwarnings(False)
+                GPIO.setup(SOUND_PIN, GPIO.IN)
+                GPIO.setup(SOIL_PIN, GPIO.IN)
+
                 self.dht = adafruit_dht.DHT11(DHT_PIN)
-                self.sound_sensor = Button(SOUND_PIN, pull_up=True)
-                self.soil_sensor = Button(SOIL_PIN, pull_up=False)
-                print("Sensors initialized: DHT11, Sound, Soil Moisture")
+                print("Sensors initialized: DHT11, Sound (GPIO), Soil (GPIO)")
             except Exception as e:
                 print(f"Sensor initialization error: {e}")
                 self.dht = None
-                self.sound_sensor = None
-                self.soil_sensor = None
+                # GPIO still usable for digital reads if import succeeded
         else:
             self.dht = None
-            self.sound_sensor = None
-            self.soil_sensor = None
 
     def start(self):
         """Start continuous sensor reading"""
@@ -124,16 +134,34 @@ class SensorHandler:
                 self.dht.exit()
             except Exception:
                 pass
+        if HARDWARE_AVAILABLE:
+            try:
+                GPIO.cleanup()
+            except Exception:
+                pass
 
     def _read_loop(self):
         """Continuous reading loop"""
         while self.running:
             try:
+                _t0 = time.perf_counter()
                 self._read_sensors()
                 self._calculate_derived_values()
                 self._log_data()
                 self.read_count += 1
                 self.last_read_time = datetime.now()
+                # perf
+                self.last_cycle_ms = (time.perf_counter() - _t0) * 1000.0
+                # simple moving average
+                if self.avg_cycle_ms == 0:
+                    self.avg_cycle_ms = self.last_cycle_ms
+                else:
+                    self.avg_cycle_ms = (self.avg_cycle_ms * 0.9) + (self.last_cycle_ms * 0.1)
+
+                # periodic performance log
+                if self.read_count % self.perf_log_interval == 0:
+                    self._log_performance()
+
                 time.sleep(3)
             except Exception as e:
                 self.error_count += 1
@@ -143,32 +171,48 @@ class SensorHandler:
     def _read_sensors(self):
         """Read physical sensors - lab6_2 logic"""
         import random
-        
+
         if HARDWARE_AVAILABLE:
-            # DHT11 (may raise RuntimeError frequently; retry strategy handled by loop)
+            # DHT11 with small retry loop (lab6_2 reliability improvement)
             if self.dht:
-                try:
-                    self.temperature = self.dht.temperature
-                    self.humidity = self.dht.humidity
-                except RuntimeError as e:
-                    # DHT sensors often fail a read; log and keep previous values
-                    print(f"DHT read error: {e}")
-                except Exception as e:
-                    print(f"Unexpected DHT error: {e}")
+                success = False
+                for _ in range(3):
+                    try:
+                        t = self.dht.temperature
+                        h = self.dht.humidity
+                        if t is not None and h is not None:
+                            self.temperature = t
+                            self.humidity = h
+                            self._last_temp_ok = t
+                            self._last_humid_ok = h
+                            success = True
+                            break
+                    except RuntimeError as e:
+                        # Typical transient error; retry shortly
+                        time.sleep(0.2)
+                    except Exception as e:
+                        print(f"Unexpected DHT error: {e}")
+                        break
+                if not success:
+                    # Keep last known good values if available
+                    if self._last_temp_ok is not None:
+                        self.temperature = self._last_temp_ok
+                    if self._last_humid_ok is not None:
+                        self.humidity = self._last_humid_ok
 
-            # Sound sensor (digital input)
-            if self.sound_sensor is not None:
-                try:
-                    self.sound_detected = bool(self.sound_sensor.is_pressed)
-                except Exception as e:
-                    print(f"Sound sensor error: {e}")
+            # Sound sensor (digital input) — match lab6_2 mapping
+            try:
+                sound_digital = GPIO.input(SOUND_PIN)
+                self.sound_detected = bool(sound_digital)
+            except Exception as e:
+                print(f"Sound sensor error: {e}")
 
-            # Soil moisture (digital input)
-            if self.soil_sensor is not None:
-                try:
-                    self.soil_is_dry = bool(self.soil_sensor.is_pressed)
-                except Exception as e:
-                    print(f"Soil sensor error: {e}")
+            # Soil moisture (digital input) — HIGH->DRY, LOW->WET (lab6_2)
+            try:
+                soil_digital = GPIO.input(SOIL_PIN)
+                self.soil_is_dry = bool(soil_digital)
+            except Exception as e:
+                print(f"Soil sensor error: {e}")
         else:
             # Simulation mode (same behaviour as lab6_2)
             self.temperature = 28 + random.uniform(0, 8)
@@ -210,10 +254,11 @@ class SensorHandler:
             with open(SENSOR_LOG, 'w', newline='') as f:
                 writer = csv.writer(f)
                 writer.writerow([
-                    'Timestamp', 'Temperature_C', 'Humidity_%', 
-                    'Soil_Status', 'Ash_Level', 'Simulated_PM25_ugm3',
+                    'Timestamp', 'Temperature_C', 'Humidity_%',
+                    'Soil_Digital_Reading', 'Soil_Status', 'Ash_Level', 'Simulated_PM25_ugm3',
                     'Sound_Detected', 'Simulated_Tremor_ms2',
-                    'Air_Quality_Status', 'Tremor_Status'
+                    'Air_Quality_Status', 'Tremor_Status',
+                    'Read_Count', 'Errors', 'Cycle_ms', 'Avg_Cycle_ms'
                 ])
         
         air_status, _ = self.get_air_quality_status()
@@ -226,12 +271,34 @@ class SensorHandler:
                 f"{self.temperature:.1f}" if self.temperature else "N/A",
                 f"{self.humidity:.1f}" if self.humidity else "N/A",
                 "DRY" if self.soil_is_dry else "WET",
+                "DRY" if self.soil_is_dry else "WET",
                 self.ash_level,
                 f"{self.pm25:.1f}" if self.pm25 else "N/A",
                 "YES" if self.sound_detected else "NO",
                 f"{self.tremor:.3f}",
                 air_status,
-                tremor_status
+                tremor_status,
+                self.read_count,
+                self.error_count,
+                round(self.last_cycle_ms, 2),
+                round(self.avg_cycle_ms, 2)
+            ])
+
+    def _log_performance(self):
+        """Append a lightweight performance line every N cycles."""
+        header = [
+            'Timestamp', 'Read_Count', 'Errors', 'Cycle_ms', 'Avg_Cycle_ms'
+        ]
+        if not os.path.exists(PERF_LOG):
+            with open(PERF_LOG, 'w', newline='') as f:
+                csv.writer(f).writerow(header)
+        with open(PERF_LOG, 'a', newline='') as f:
+            csv.writer(f).writerow([
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                self.read_count,
+                self.error_count,
+                round(self.last_cycle_ms, 2),
+                round(self.avg_cycle_ms, 2)
             ])
     def get_air_quality_status(self):
         """Get air quality classification"""
@@ -669,15 +736,18 @@ class DashboardPage:
         soil_dry = self.app.sensors.soil_is_dry
         ash_level = self.app.sensors.ash_level
         
+        # DEBUG: Print what GUI sees
+        print(f"[GUI] T={temp} H={humid} PM={pm25} Tremor={tremor}")
+        
         # Update PM2.5
-        if pm25:
+        if pm25 is not None:
             self.cards['pm25']['value'].set(f"{pm25:.0f} ug/m3")
             status, color = self.app.sensors.get_air_quality_status()
             self.cards['pm25']['status_text'].set(status)
             self.cards['pm25']['status'].config(fg=color)
         
         # Update Temperature
-        if temp:
+        if temp is not None:
             self.cards['temp']['value'].set(f"{temp:.0f}C")
             if temp > 35:
                 self.cards['temp']['status_text'].set("HIGH")
@@ -687,7 +757,7 @@ class DashboardPage:
                 self.cards['temp']['status'].config(fg=COLORS['safe'])
         
         # Update Humidity
-        if humid:
+        if humid is not None:
             self.cards['humidity']['value'].set(f"{humid:.0f}%")
             if humid > 80:
                 self.cards['humidity']['status_text'].set("High")
