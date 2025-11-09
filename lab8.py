@@ -73,11 +73,11 @@ REPORT_LOG = "lab8_user_reports.csv"
 # ============================================
 
 class SensorHandler:
-    """Handles all sensor reading and data processing"""
-    
+    """Handles all sensor reading and data processing (based on lab6_2 logic)"""
+
     def __init__(self):
         self.running = False
-        
+
         # Current sensor values
         self.temperature = None
         self.humidity = None
@@ -86,12 +86,12 @@ class SensorHandler:
         self.ash_level = "UNKNOWN"
         self.pm25 = None
         self.tremor = 0.01
-        
+
         # Performance metrics
         self.read_count = 0
         self.error_count = 0
         self.last_read_time = None
-        
+
         # Initialize hardware
         if HARDWARE_AVAILABLE:
             try:
@@ -108,20 +108,23 @@ class SensorHandler:
             self.dht = None
             self.sound_sensor = None
             self.soil_sensor = None
-    pass
+
     def start(self):
         """Start continuous sensor reading"""
         self.running = True
         thread = threading.Thread(target=self._read_loop, daemon=True)
         thread.start()
         print("Sensor reading thread started")
-    pass
+
     def stop(self):
         """Stop sensor reading"""
         self.running = False
         if HARDWARE_AVAILABLE and self.dht:
-            self.dht.exit()
-    pass
+            try:
+                self.dht.exit()
+            except Exception:
+                pass
+
     def _read_loop(self):
         """Continuous reading loop"""
         while self.running:
@@ -136,53 +139,66 @@ class SensorHandler:
                 self.error_count += 1
                 print(f"Sensor read error: {e}")
                 time.sleep(5)
-    pass
+
     def _read_sensors(self):
-        """Read physical sensors"""
+        """Read physical sensors (uses gpiozero when available)."""
         if HARDWARE_AVAILABLE:
-            # DHT11 (simulates DHT22)
+            # DHT11 (may raise RuntimeError frequently; retry strategy handled by loop)
             if self.dht:
                 try:
                     self.temperature = self.dht.temperature
                     self.humidity = self.dht.humidity
-                except RuntimeError:
-                    pass
-            
-            # Sound sensor (simulates seismic sensor)
-            if self.sound_sensor:
-                self.sound_detected = self.sound_sensor.is_pressed
-            
-            # Soil moisture (simulates PM2.5 via ash accumulation)
-            if self.soil_sensor:
-                self.soil_is_dry = self.soil_sensor.is_pressed
+                except RuntimeError as e:
+                    # DHT sensors often fail a read; log and keep previous values
+                    print(f"DHT read error: {e}")
+                except Exception as e:
+                    print(f"Unexpected DHT error: {e}")
+
+            # Sound sensor (digital input)
+            if self.sound_sensor is not None:
+                try:
+                    self.sound_detected = bool(self.sound_sensor.is_pressed)
+                except Exception as e:
+                    print(f"Sound sensor error: {e}")
+
+            # Soil moisture (digital input)
+            if self.soil_sensor is not None:
+                try:
+                    self.soil_is_dry = bool(self.soil_sensor.is_pressed)
+                except Exception as e:
+                    print(f"Soil sensor error: {e}")
         else:
-            # Simulation mode
+            # Simulation mode (same behaviour as lab6_2)
             import random
             self.temperature = 28 + random.uniform(0, 8)
             self.humidity = 70 + random.uniform(-10, 10)
             self.sound_detected = random.random() < 0.1
             self.soil_is_dry = random.random() < 0.3
-    pass
+
     def _calculate_derived_values(self):
-        """Calculate PM2.5 and tremor from available sensors"""
-        # PM2.5 from soil moisture
-        # Logic: Dry soil = Ash accumulation = High PM2.5
-        if self.soil_is_dry:
-            import random
-            self.pm25 = 350 + random.uniform(0, 150)
+        """Calculate PM2.5 and tremor from available sensors (lab6_2 mapping)."""
+        import random
+
+        # PM2.5 mapping derived from digital soil reading (lab6_2 logic):
+        # Dry soil -> Heavy ash -> High PM2.5 (400-500)
+        # Wet soil -> No ash -> Low PM2.5 (0-50)
+        if self.soil_is_dry is None:
+            self.pm25 = None
+            self.ash_level = "UNKNOWN"
+        elif self.soil_is_dry:
+            self.pm25 = round(400 + random.uniform(0, 100), 1)
             self.ash_level = "HEAVY"
         else:
-            import random
-            self.pm25 = random.uniform(10, 60)
+            self.pm25 = round(random.uniform(0, 50), 1)
             self.ash_level = "NONE"
-        
-        # Tremor from sound sensor
-        # Logic: Sound = Vibration = Seismic activity
+
+        # Tremor (lab6_2 calculate_tremor behaviour)
         if self.sound_detected:
-            self.tremor = min(self.tremor + 0.02, 0.10)
+            trem = round(self.tremor + 0.02, 3)
+            self.tremor = min(trem, 0.10)
         else:
-            self.tremor = max(self.tremor * 0.85, 0.001)
-    pass
+            trem = round(self.tremor * 0.8, 3)
+            self.tremor = max(trem, 0.001)
 
     def _log_data(self):
         """Log sensor data to CSV - Clean format for future sensor compatibility"""
@@ -198,17 +214,82 @@ class SensorHandler:
                     'Air_Quality_Status',
                     'Seismic_Status'
                 ])
-
+        
         air_status, _ = self.get_air_quality_status()
         tremor_status, _ = self.get_tremor_status()
-
+        
         with open(SENSOR_LOG, 'a', newline='') as f:
             writer = csv.writer(f)
             writer.writerow([
                 datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                f"{self.temperature:.1f}" if self.temperature is not None else "N/A",
-                f"{self.humidity:.1f}" if self.humidity is not None else "N/A",
-                f"{self.pm25:.1f}" if self.pm25 is not None else "N/A",
+                f"{self.temperature:.1f}" if self.temperature else "N/A",
+                f"{self.humidity:.1f}" if self.humidity else "N/A",
+                f"{self.pm25:.1f}" if self.pm25 else "N/A",
+                f"{self.tremor:.3f}",
+                air_status,
+                tremor_status
+            ])
+
+    def get_air_quality_status(self):
+        """Get air quality classification"""
+        if self.pm25 is None:
+            return "UNKNOWN", COLORS['text_light']
+        elif self.pm25 <= 50:
+            return "SAFE", COLORS['safe']
+        elif self.pm25 <= 150:
+            return "MODERATE", COLORS['moderate']
+        elif self.pm25 <= 250:
+            return "UNHEALTHY", COLORS['unhealthy']
+        else:
+            return "HAZARDOUS", COLORS['danger']
+
+    def get_tremor_status(self):
+        """Get tremor classification"""
+        if self.tremor < 0.01:
+            return "NORMAL", COLORS['safe']
+        elif self.tremor < 0.02:
+            return "MINOR", COLORS['moderate']
+        elif self.tremor < 0.05:
+            return "MODERATE", COLORS['unhealthy']
+        else:
+            return "STRONG", COLORS['danger']
+
+    def get_ash_status_color(self):
+        """Get color for ash level"""
+        if self.ash_level == "NONE":
+            return COLORS['safe']
+        elif self.ash_level == "LIGHT":
+            return COLORS['moderate']
+        elif self.ash_level == "MODERATE":
+            return COLORS['unhealthy']
+        else:
+            return COLORS['danger']
+
+    def _log_data(self):
+        """Log sensor data to CSV - Clean format for future sensor compatibility"""
+        if not os.path.exists(SENSOR_LOG):
+            with open(SENSOR_LOG, 'w', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerow([
+                    'Timestamp',
+                    'Temperature_C',
+                    'Humidity_%',
+                    'PM25_ugm3',
+                    'Tremor_ms2',
+                    'Air_Quality_Status',
+                    'Seismic_Status'
+                ])
+        
+        air_status, _ = self.get_air_quality_status()
+        tremor_status, _ = self.get_tremor_status()
+        
+        with open(SENSOR_LOG, 'a', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                f"{self.temperature:.1f}" if self.temperature else "N/A",
+                f"{self.humidity:.1f}" if self.humidity else "N/A",
+                f"{self.pm25:.1f}" if self.pm25 else "N/A",
                 f"{self.tremor:.3f}",
                 air_status,
                 tremor_status
