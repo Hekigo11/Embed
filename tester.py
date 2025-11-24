@@ -68,14 +68,14 @@ def read_mpu():
 # MQ135 (via ADS1115 ADC)
 # ============================================================
 
-i2c = busio.I2C(board.SCL, board.SDA)
-adc = ADS1115(i2c)
-mq135 = AnalogIn(adc, ADS1115.P0)
+# i2c = busio.I2C(board.SCL, board.SDA)
+# adc = ADS1115(i2c)
+# mq135 = AnalogIn(adc, ADS1115.P0)
 
-def read_mq135():
-    """Return raw voltage of MQ-135"""
-    voltage = mq135.voltage
-    return round(voltage, 3)
+# def read_mq135():
+#     """Return raw voltage of MQ-135"""
+#     voltage = mq135.voltage
+#     return round(voltage, 3)
 
 
 # ============================================================
@@ -113,7 +113,7 @@ while True:
     ax, ay, az, gx, gy, gz = read_mpu()
 
     # MQ135
-    mq = read_mq135()
+    # mq = read_mq135()
 
     # DHT11
     temp, hum = read_dht11()
@@ -123,7 +123,7 @@ while True:
     print(f"PMS7003 → PM1={pm1}, PM2.5={pm25}, PM10={pm10}")
     print(f"MPU9265 → Accel: X={ax:.2f} Y={ay:.2f} Z={az:.2f}")
     print(f"          Gyro : X={gx:.2f} Y={gy:.2f} Z={gz:.2f}")
-    print(f"MQ135    → Gas (raw voltage): {mq} V")
+    # print(f"MQ135    → Gas (raw voltage): {mq} V")
     print(f"DHT11    → Temp: {temp if temp else 'N/A'} °C | Humidity: {hum if hum else 'N/A'} %")
     print("====================================================\n")
 
