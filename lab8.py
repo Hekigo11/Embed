@@ -1,18 +1,3 @@
-#!/usr/bin/env python3
-"""
-LAB 8: Integrated Ashfall Monitoring Kiosk
-Complete system with sensors, GUI, and hardware outputs
-
-Pages:
-1. Dashboard - Real-time sensor display
-2. Report Conditions - Community reporting
-
-Hardware Available:
-- Input: DHT11, Sound Sensor (digital), Soil Moisture (digital)
-- Output: RGB LED, Buzzer, Beacon LED
-
-Simulates: PM2.5, DHT22, Seismic sensor using available hardware
-"""
 
 import tkinter as tk
 from tkinter import ttk, messagebox
