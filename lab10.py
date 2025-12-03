@@ -52,6 +52,9 @@ cap  = cv2.VideoCapture(0)
 if not cap.isOpened():
     raise RuntimeError("Cannot open webcam")
 
+last_beep_time = 0
+beep_interval = 1
+
 # VOID LOOP ==================================================================
 while True:
     ret, frame = cap.read()
@@ -78,7 +81,12 @@ while True:
         #     # sleep(0.2)
         #     buzzer.off()
         #     # sleep(0.2)
-        beep_times(face_count, buzzer)
+        # beep_times(face_count, buzzer)
+        current_time = time.time()
+        if current_time - last_beep_time >= beep_interval:
+            beep_times(face_count, buzzer)
+            last_beep_time = current_time
+
         # sleep(1)
 
         
