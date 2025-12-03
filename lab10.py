@@ -52,9 +52,10 @@ cap  = cv2.VideoCapture(0)
 if not cap.isOpened():
     raise RuntimeError("Cannot open webcam")
 
+last_face_count = 0
 last_beep_time = 0
-beep_interval = 1
-
+beep_cooldown = 1.0 
+beep_interval = 1.0
 # VOID LOOP ==================================================================
 while True:
     ret, frame = cap.read()
@@ -76,20 +77,23 @@ while True:
         for i in range(min(face_count, len(leds))):
             leds[i].on()
 
-        for j in range(face_count):
-            buzzer.on()
-            time.sleep(0.2)
-            buzzer.off()
-            time.sleep(0.2)
-            time.sleep(1)
+        # for j in range(face_count):
+        #     buzzer.on()
+        #     time.sleep(0.2)
+        #     buzzer.off()
+        #     time.sleep(0.2)
+        #     time.sleep(1)
         # beep_times(face_count, buzzer)
-        # current_time = time.time()
-        # if current_time - last_beep_time >= beep_interval:
-        #     beep_times(face_count, buzzer)
-        #     last_beep_time = current_time
+        current_time = time.time()
+        if current_time - last_beep_time >= beep_interval:
+            beep_times(face_count, buzzer)
+            last_beep_time = current_time
 
         # sleep(1)
-
+    else:
+   
+        for led in leds:
+            led.off()
         
     cv2.imshow('Webcam', frame)
     if cv2.waitKey(1) & 0xFF == ord('q'):
