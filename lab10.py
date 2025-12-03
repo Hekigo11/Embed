@@ -37,9 +37,9 @@ def beep_times(count, buzzer):
     def run():
         for _ in range(count):
             buzzer.on()
-            time.sleep(0.1)
+            time.sleep(1)
             buzzer.off()
-            time.sleep(0.1)
+            time.sleep(1)
     threading.Thread(target=run, daemon=True).start()
 
 
