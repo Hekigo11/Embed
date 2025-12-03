@@ -76,16 +76,17 @@ while True:
         for i in range(min(face_count, len(leds))):
             leds[i].on()
 
-        # for j in range(face_count):
-        #     buzzer.on()
-        #     # sleep(0.2)
-        #     buzzer.off()
-        #     # sleep(0.2)
+        for j in range(face_count):
+            buzzer.on()
+            time.sleep(0.2)
+            buzzer.off()
+            time.sleep(0.2)
+            time.sleep(1)
         # beep_times(face_count, buzzer)
-        current_time = time.time()
-        if current_time - last_beep_time >= beep_interval:
-            beep_times(face_count, buzzer)
-            last_beep_time = current_time
+        # current_time = time.time()
+        # if current_time - last_beep_time >= beep_interval:
+        #     beep_times(face_count, buzzer)
+        #     last_beep_time = current_time
 
         # sleep(1)
 
