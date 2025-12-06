@@ -76,6 +76,7 @@ try:
 except Exception:
     GPIO_AVAILABLE = False
 
+baseline_accel = None
 # -----------------------------
 # Pin mapping (change if needed)
 # -----------------------------
@@ -213,7 +214,27 @@ def read_pms7003():
         pass
     return None
 
+# def read_mpu_accel_mag():
+#     if not MPU_AVAILABLE or mpu_bus is None:
+#         return None
+#     try:
+#         def r16(reg):
+#             hi = mpu_bus.read_byte_data(MPU_ADDR, reg)
+#             lo = mpu_bus.read_byte_data(MPU_ADDR, reg+1)
+#             val = (hi << 8) | lo
+#             if val & 0x8000:
+#                 val -= 65536
+#             return val
+#         ax = r16(0x3B) / 16384.0
+#         ay = r16(0x3D) / 16384.0
+#         az = r16(0x3F) / 16384.0
+#         mag = (ax*ax + ay*ay + az*az) ** 0.5
+#         return round(mag, 3)
+#     except Exception:
+#         return None
 def read_mpu_accel_mag():
+    global baseline_accel
+    
     if not MPU_AVAILABLE or mpu_bus is None:
         return None
     try:
@@ -224,14 +245,24 @@ def read_mpu_accel_mag():
             if val & 0x8000:
                 val -= 65536
             return val
+        
         ax = r16(0x3B) / 16384.0
         ay = r16(0x3D) / 16384.0
         az = r16(0x3F) / 16384.0
-        mag = (ax*ax + ay*ay + az*az) ** 0.5
-        return round(mag, 3)
+        
+        current_mag = (ax*ax + ay*ay + az*az) ** 0.5
+        
+        # Initialize baseline on first reading
+        if baseline_accel is None:
+            baseline_accel = current_mag
+            return 0.0  # No deviation initially
+        
+        # Return deviation from baseline (tremor intensity)
+        deviation = abs(current_mag - baseline_accel)
+        return round(deviation, 3)
+        
     except Exception:
         return None
-
 def read_mq135_voltage():
     if not ADS_AVAILABLE or mq_chan is None:
         return None
