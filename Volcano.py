@@ -24,7 +24,7 @@ from datetime import datetime
 # -----------------------------
 # Firebase setup (replace values)
 # -----------------------------
-FIREBASE_JSON_PATH = "volcano-monitoring-system-firebase-adminsdk-fbsvc-75eba7d26a.json"
+FIREBASE_JSON_PATH = "volcano-monitoring-system-firebase-adminsdk-fbsvc-a22cd5de50.json"
 FIREBASE_DB_URL = "https://volcano-monitoring-system-default-rtdb.asia-southeast1.firebasedatabase.app/"
 
 
@@ -148,7 +148,8 @@ if ADS_AVAILABLE:
     try:
         i2c = busio.I2C(board.SCL, board.SDA)
         ads = ADS.ADS1115(i2c)
-        mq_chan = AnalogIn(ads, getattr(ADS, f'P{ADS_CHANNEL}'))
+        # mq_chan = AnalogIn(ads, getattr(ADS, f'P{ADS_CHANNEL}'))
+        mq_chan = AnalogIn(ads, ADS.P0)  
     except Exception as e:
         print("ADS1115 init error:", e)
         ads = None
