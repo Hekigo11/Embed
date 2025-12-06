@@ -271,29 +271,29 @@ def siren_on(state=True):
 # Simple alerting logic
 # -----------------------------
 # def evaluate_alert(pm25, accel_mag, mqv):
-    """
-    Return level (0..3) and reason string.
-    Simple thresholds — tune for field.
-    """
-    level = 0
-    reasons = []
-    if pm25 is not None:
-        if pm25 > 350:
-            level = max(level, 3); reasons.append("PM Hazardous")
-        elif pm25 > 200:
-            level = max(level, 2); reasons.append("PM Very Unhealthy")
-        elif pm25 > 100:
-            level = max(level, 1); reasons.append("PM Unhealthy")
-    if accel_mag is not None:
-        if accel_mag > 1.0:
-            level = max(level, 3); reasons.append("Strong Tremor")
-        elif accel_mag > 0.5:
-            level = max(level, 2); reasons.append("Moderate Tremor")
-        elif accel_mag > 0.15:
-            level = max(level, 1); reasons.append("Light Tremor")
-    if mqv is not None and mqv > 2.5:
-        level = max(level, 2); reasons.append("Gas Rise")
-    return level, "; ".join(reasons) if reasons else "Normal"
+    # """
+    # Return level (0..3) and reason string.
+    # Simple thresholds — tune for field.
+    # """
+    # level = 0
+    # reasons = []
+    # if pm25 is not None:
+    #     if pm25 > 350:
+    #         level = max(level, 3); reasons.append("PM Hazardous")
+    #     elif pm25 > 200:
+    #         level = max(level, 2); reasons.append("PM Very Unhealthy")
+    #     elif pm25 > 100:
+    #         level = max(level, 1); reasons.append("PM Unhealthy")
+    # if accel_mag is not None:
+    #     if accel_mag > 1.0:
+    #         level = max(level, 3); reasons.append("Strong Tremor")
+    #     elif accel_mag > 0.5:
+    #         level = max(level, 2); reasons.append("Moderate Tremor")
+    #     elif accel_mag > 0.15:
+    #         level = max(level, 1); reasons.append("Light Tremor")
+    # if mqv is not None and mqv > 2.5:
+    #     level = max(level, 2); reasons.append("Gas Rise")
+    # return level, "; ".join(reasons) if reasons else "Normal"
 def evaluate_alert(pm25, accel_mag, mqv, temp=None):
     """
     Standardized PHIVOLCS-inspired alert levels.
