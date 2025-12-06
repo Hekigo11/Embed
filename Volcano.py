@@ -60,6 +60,8 @@ except Exception:
 
 # ADS1115 for MQ135
 try:
+    if board is None:
+        import board
     import busio
     import adafruit_ads1x15.ads1115 as ADS
     from adafruit_ads1x15.analog_in import AnalogIn
@@ -147,9 +149,9 @@ mq_chan = None
 if ADS_AVAILABLE:
     try:
         i2c = busio.I2C(board.SCL, board.SDA)
-        ads = ADS.ADS1115(i2c)
+        ads = ADS.ADS1115(i2c, address=0x48)
         # mq_chan = AnalogIn(ads, getattr(ADS, f'P{ADS_CHANNEL}'))
-        mq_chan = AnalogIn(ads, ADS.P0)  
+        mq_chan = AnalogIn(ads, 0)  
     except Exception as e:
         print("ADS1115 init error:", e)
         ads = None
