@@ -344,21 +344,21 @@ def evaluate_alert(pm25, accel_mag, mqv, temp=None):
     reasons = []
 
     # --- Level 1: Low Intermittent Unrest ---
-    if accel_mag and accel_mag >= 0.05:
+    if accel_mag and accel_mag >= 0.05 and accel_mag < 0.15:
         level = max(level, 1)
         reasons.append("Light tremor")
-    if mqv and mqv >= 1.0:
+    if mqv and mqv >= 1.0 and mqv < 1.8:
         level = max(level, 1)
         reasons.append("Slight gas rise")
-    if temp and temp >= 45:
+    if temp and temp >= 45 and temp < 60:
         level = max(level, 1)
         reasons.append("Slight temperature increase")
 
     # --- Level 2: Moderate Unrest ---
-    if accel_mag and accel_mag >= 0.15:
+    if accel_mag and accel_mag >= 0.15 and accel_mag < 0.5:
         level = max(level, 2)
         reasons.append("Elevated tremor")
-    if mqv and mqv >= 1.8:
+    if mqv and mqv >= 1.8 and mqv < 2.5:
         level = max(level, 2)
         reasons.append("Moderate gas increase")
     if temp and temp >= 60:
@@ -366,10 +366,10 @@ def evaluate_alert(pm25, accel_mag, mqv, temp=None):
         reasons.append("High temperature")
 
     # --- Level 3: High Unrest ---
-    if accel_mag and accel_mag >= 0.5:
+    if accel_mag and accel_mag >= 0.5 and accel_mag < 1.0:
         level = max(level, 3)
         reasons.append("Strong tremor")
-    if pm25 and pm25 >= 150:
+    if pm25 and pm25 >= 150 and pm25 < 350:
         level = max(level, 3)
         reasons.append("High ash emission")
     if mqv and mqv >= 2.5:
@@ -377,17 +377,17 @@ def evaluate_alert(pm25, accel_mag, mqv, temp=None):
         reasons.append("High gas level")
 
     # --- Level 4: Hazardous Eruption Imminent ---
-    if accel_mag and accel_mag >= 1.0:
+    if accel_mag and accel_mag >= 1.0 and accel_mag < 1.5:
         level = max(level, 4)
         reasons.append("Very strong tremor")
-    if pm25 and pm25 >= 350:
+    if pm25 and pm25 >= 350 and pm25 < 500:
         level = max(level, 4)
         reasons.append("Hazardous ash emission")
 
     # --- Level 5: Hazardous Eruption Ongoing ---
     if accel_mag and accel_mag >= 1.5:
         level = max(level, 5)
-        reasons.append("Extreme tremor (eruption)")
+        reasons.append("Extreme tremor (Earthquake or eruption)")
     if pm25 and pm25 >= 500:
         level = max(level, 5)
         reasons.append("Extreme ash (eruption)")
