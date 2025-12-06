@@ -24,7 +24,7 @@ from datetime import datetime
 # -----------------------------
 # Firebase setup (replace values)
 # -----------------------------
-FIREBASE_JSON_PATH = "volcano-monitoring-system-firebase-adminsdk-fbsvc-a22cd5de50.json"
+FIREBASE_JSON_PATH = "volcano-monitoring-system-firebase-adminsdk-fbsvc-46b12dff1f.json"
 FIREBASE_DB_URL = "https://volcano-monitoring-system-default-rtdb.asia-southeast1.firebasedatabase.app/"
 
 
