@@ -1,0 +1,8 @@
+# Firebase credentials
+*.json
+volcano-monitoring-system-firebase-adminsdk-*.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
